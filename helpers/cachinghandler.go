@@ -65,11 +65,21 @@ func (c *CachingHandler) ToHandle(f billy.Filesystem, path []string) []byte {
 	newPath := make([]string, len(path))
 
 	copy(newPath, path)
-	evictedKey, evictedPath, ok := c.activeHandles.GetOldest()
-	if evicted := c.activeHandles.Add(id, entry{f, newPath}); evicted && ok {
-		rk := evictedPath.f.Join(evictedPath.p...)
+	// Evict atomically: RemoveOldest returns the exact entry it
+	// removed, so the reverse-map purge always pairs with the right
+	// handle. The previous GetOldest-then-Add raced with concurrent
+	// Gets re-ordering the LRU between the read and the Add, purging
+	// the reverse mapping of a still-live handle while a dead one
+	// lingered under another path.
+	for c.activeHandles.Len() >= c.cacheLimit {
+		evictedKey, evictedEntry, ok := c.activeHandles.RemoveOldest()
+		if !ok {
+			break
+		}
+		rk := evictedEntry.f.Join(evictedEntry.p...)
 		c.evictReverseCache(rk, evictedKey)
 	}
+	c.activeHandles.Add(id, entry{f, newPath})
 
 	c.appendReverseHandle(joinedPath, id)
 	b, _ := id.MarshalBinary()
@@ -85,17 +95,14 @@ func (c *CachingHandler) FromHandle(fh []byte) (billy.Filesystem, []string, erro
 	}
 
 	if f, ok := c.activeHandles.Get(id); ok {
-		for _, k := range c.activeHandles.Keys() {
-			candidate, _ := c.activeHandles.Peek(k)
-			if hasPrefix(f.p, candidate.p) {
-				_, _ = c.activeHandles.Get(k)
-			}
-		}
-		if ok {
-			newP := make([]string, len(f.p))
-			copy(newP, f.p)
-			return f.f, newP, nil
-		}
+		// Entries are independent (each stores its own full path);
+		// the previous O(cache) ancestor-promotion scan here both
+		// burned a full cache scan per NFS call and, on small caches,
+		// the promotion storm evicted other clients' live handles
+		// (client-visible ESTALE under concurrent CREATE).
+		newP := make([]string, len(f.p))
+		copy(newP, f.p)
+		return f.f, newP, nil
 	}
 	return nil, []string{}, &nfs.NFSStatusError{NFSStatus: nfs.NFSStatusStale}
 }
