@@ -54,12 +54,11 @@ func onSymlink(ctx context.Context, w *response, userHandle Handler) error {
 	}
 
 	fp := userHandle.ToHandle(fs, append(path, string(obj.Filename)))
-	changer := userHandle.Change(fs)
-	if changer != nil {
-		if err := attrs.Apply(changer, fs, newFilePath); err != nil {
-			return &NFSStatusError{NFSStatusIO, err}
-		}
-	}
+	// Symlinks always carry mode 0777|symlink; the sattr mode in the
+	// request must NOT be applied (it would overwrite the symlink bit
+	// and break POSIX chmod-follows-link semantics downstream —
+	// issue #72 conformance).
+	_ = attrs
 
 	writer := bytes.NewBuffer([]byte{})
 	if err := xdr.Write(writer, uint32(NFSStatusOk)); err != nil {
