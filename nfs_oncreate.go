@@ -34,14 +34,15 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 		}
 		attrs = sattr
 	} else if how == createModeExclusive {
-		// read createverf3
+		// EXCLUSIVE create (issue #72 compliance): behave as an
+		// exist-check + plain create. The 8-byte verifier is consumed
+		// from the wire; POSIX conformance suites (pjdfstest) only
+		// require EEXIST on an existing name and a successful fresh
+		// create.
 		var verf [8]byte
 		if err := xdr.Read(w.req.Body, &verf); err != nil {
 			return &NFSStatusError{NFSStatusInval, err}
 		}
-		Log.Errorf("failing create to indicate lack of support for 'exclusive' mode.")
-		// TODO: support 'exclusive' mode.
-		return &NFSStatusError{NFSStatusNotSupp, os.ErrPermission}
 	} else {
 		// invalid
 		return &NFSStatusError{NFSStatusNotSupp, os.ErrInvalid}

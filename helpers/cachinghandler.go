@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/willscott/go-nfs"
+	"github.com/jibudata/go-nfs"
 
 	"github.com/go-git/go-billy/v5"
 	"github.com/google/uuid"
