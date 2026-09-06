@@ -88,10 +88,12 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 	}
 
 	fp := userHandle.ToHandle(fs, newFile)
-	changer := userHandle.Change(fs)
-	if err := attrs.Apply(changer, fs, newFilePath); err != nil {
-		Log.Errorf("Error applying attributes: %v\n", err)
-		return &NFSStatusError{NFSStatusIO, err}
+	if attrs != nil {
+		changer := userHandle.Change(fs)
+		if err := attrs.Apply(changer, fs, newFilePath); err != nil {
+			Log.Errorf("Error applying attributes: %v\n", err)
+			return &NFSStatusError{NFSStatusIO, err}
+		}
 	}
 
 	writer := bytes.NewBuffer([]byte{})
