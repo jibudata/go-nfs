@@ -39,17 +39,21 @@ func onMknod(ctx context.Context, w *response, userHandle Handler) error {
 	// see if the filesystem supports mknod
 	fs, path, err := userHandle.FromHandle(obj.Handle)
 	if err != nil {
+		Log.Errorf("[mknoddbg] FromHandle: %v", err)
 		return &NFSStatusError{NFSStatusStale, err}
 	}
 	if !billy.CapabilityCheck(fs, billy.WriteCapability) {
+		Log.Errorf("[mknoddbg] ROFS")
 		return &NFSStatusError{NFSStatusROFS, os.ErrPermission}
 	}
 	c := userHandle.Change(fs)
 	if c == nil {
+		Log.Errorf("[mknoddbg] Change() returned nil")
 		return &NFSStatusError{NFSStatusAccess, os.ErrPermission}
 	}
 	cu, ok := c.(UnixChange)
 	if !ok {
+		Log.Errorf("[mknoddbg] UnixChange assertion failed (type %T)", c)
 		return &NFSStatusError{NFSStatusAccess, os.ErrPermission}
 	}
 
