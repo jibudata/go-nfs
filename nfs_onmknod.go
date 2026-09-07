@@ -33,8 +33,10 @@ func onMknod(ctx context.Context, w *response, userHandle Handler) error {
 
 	ftype, err := xdr.ReadUint32(w.req.Body)
 	if err != nil {
+		Log.Errorf("[mknoddbg] ftype parse: %v", err)
 		return &NFSStatusError{NFSStatusInval, err}
 	}
+	Log.Errorf("[mknoddbg] ENTRY ftype=%d", ftype)
 
 	// see if the filesystem supports mknod
 	fs, path, err := userHandle.FromHandle(obj.Handle)
