@@ -115,6 +115,16 @@ func (c *conn) serializeWrites(ctx context.Context) {
 // Handle a request. errors from this method indicate a failure to read or
 // write on the network stream, and trigger a disconnection of the connection.
 func (c *conn) handle(ctx context.Context, w *response) error {
+	// AUTH_SYS caller credentials ride on a per-request context so handlers
+	// and optional backend enforcement see the asserted identity (issue
+	// jibudata/agent-data-workspace#80).
+	if w.req.Header.Cred.Flavor == authSysFlavor {
+		if cc, err := parseAuthSys(w.req.Header.Cred.Body); err == nil {
+			ctx = WithCallerCredentials(ctx, cc)
+		} else {
+			Log.Debugf("unparseable AUTH_SYS credential: %v", err)
+		}
+	}
 	handler := c.Server.handlerFor(w.req.Header.Prog, w.req.Header.Proc)
 	if handler == nil {
 		Log.Debugf("No handler for %d.%d", w.req.Header.Prog, w.req.Header.Proc)

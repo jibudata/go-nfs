@@ -46,6 +46,9 @@ func onRemoveObj(ctx context.Context, w *response, userHandle Handler, directory
 	if !dirInfo.IsDir() {
 		return &NFSStatusError{NFSStatusNotDir, nil}
 	}
+	if statusErr := enforceDirWrite(ctx, fs, path); statusErr != nil {
+		return statusErr
+	}
 	preCacheData := ToFileAttribute(dirInfo, fullPath).AsCache()
 
 	toDelete := fs.Join(append(path, string(obj.Filename))...)

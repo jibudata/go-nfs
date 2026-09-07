@@ -53,6 +53,12 @@ func onSetAttr(ctx context.Context, w *response, userHandle Handler) error {
 		return &NFSStatusError{NFSStatusROFS, os.ErrPermission}
 	}
 
+	if en, ok := fs.(OwnershipEnforcer); ok {
+		if err := en.EnforceSetAttr(fullPath, callerUIDFromContext(ctx), info); err != nil {
+			return &NFSStatusError{NFSStatusAccess, err}
+		}
+	}
+
 	changer := userHandle.Change(fs)
 	if err := attrs.Apply(changer, fs, fs.Join(path...)); err != nil {
 		// Already an nfsstatuserror

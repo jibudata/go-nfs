@@ -71,6 +71,12 @@ func onRename(ctx context.Context, w *response, userHandle Handler) error {
 	}
 	preDestData := ToFileAttribute(toDirInfo, toDirPath).AsCache()
 
+	for _, dirParts := range [][]string{fromPath, toPath} {
+		if statusErr := enforceDirWrite(ctx, fs, dirParts); statusErr != nil {
+			return statusErr
+		}
+	}
+
 	oldHandle := userHandle.ToHandle(fs, append(fromPath, string(from.Filename)))
 
 	fromLoc := fs.Join(append(fromPath, string(from.Filename))...)

@@ -60,6 +60,10 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 		return &NFSStatusError{NFSStatusNameTooLong, nil}
 	}
 
+	if statusErr := enforceDirWrite(ctx, fs, path); statusErr != nil {
+		return statusErr
+	}
+
 	newFile := append(path, string(obj.Filename))
 	newFilePath := fs.Join(newFile...)
 	if s, err := fs.Stat(newFilePath); err == nil {
@@ -85,6 +89,10 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 	if err := file.Close(); err != nil {
 		Log.Errorf("Error Creating: %v", err)
 		return &NFSStatusError{NFSStatusAccess, err}
+	}
+
+	if en, ok := fs.(OwnershipEnforcer); ok {
+		en.NoteCreated(newFilePath, callerUIDFromContext(ctx))
 	}
 
 	fp := userHandle.ToHandle(fs, newFile)

@@ -49,6 +49,10 @@ func onLink(ctx context.Context, w *response, userHandle Handler) error {
 		return &NFSStatusError{NFSStatusNotDir, nil}
 	}
 
+	if statusErr := enforceDirWrite(ctx, fs, path); statusErr != nil {
+		return statusErr
+	}
+
 	fp := userHandle.ToHandle(fs, append(path, string(obj.Filename)))
 	changer := userHandle.Change(fs)
 	if changer == nil {

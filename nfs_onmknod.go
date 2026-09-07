@@ -73,6 +73,13 @@ func onMknod(ctx context.Context, w *response, userHandle Handler) error {
 	} else if !parent.IsDir() {
 		return &NFSStatusError{NFSStatusNotDir, nil}
 	}
+	if statusErr := enforceDirWrite(ctx, fs, path); statusErr != nil {
+		return statusErr
+	}
+	if en, ok := fs.(OwnershipEnforcer); ok {
+		en.NoteCreated(fs.Join(append(path, string(obj.Filename))...), callerUIDFromContext(ctx))
+	}
+
 	fp := userHandle.ToHandle(fs, append(path, string(obj.Filename)))
 
 	switch nfs_ftype(ftype) {

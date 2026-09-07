@@ -42,6 +42,10 @@ func onMkdir(ctx context.Context, w *response, userHandle Handler) error {
 	}
 
 	newFolder := append(path, string(obj.Filename))
+	if statusErr := enforceDirWrite(ctx, fs, path); statusErr != nil {
+		return statusErr
+	}
+
 	newFolderPath := fs.Join(newFolder...)
 	if s, err := fs.Stat(newFolderPath); err == nil {
 		if s.IsDir() {
@@ -57,6 +61,10 @@ func onMkdir(ctx context.Context, w *response, userHandle Handler) error {
 
 	if err := fs.MkdirAll(newFolderPath, attrs.Mode(mkdirDefaultMode)); err != nil {
 		return &NFSStatusError{NFSStatusAccess, err}
+	}
+
+	if en, ok := fs.(OwnershipEnforcer); ok {
+		en.NoteCreated(newFolderPath, callerUIDFromContext(ctx))
 	}
 
 	fp := userHandle.ToHandle(fs, newFolder)

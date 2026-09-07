@@ -53,6 +53,13 @@ func onSymlink(ctx context.Context, w *response, userHandle Handler) error {
 		return &NFSStatusError{NFSStatusAccess, err}
 	}
 
+	if statusErr := enforceDirWrite(ctx, fs, path); statusErr != nil {
+		return statusErr
+	}
+	if en, ok := fs.(OwnershipEnforcer); ok {
+		en.NoteCreated(fs.Join(append(path, string(obj.Filename))...), callerUIDFromContext(ctx))
+	}
+
 	fp := userHandle.ToHandle(fs, append(path, string(obj.Filename)))
 	// Symlinks always carry mode 0777|symlink; the sattr mode in the
 	// request must NOT be applied (it would overwrite the symlink bit
