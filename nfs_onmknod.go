@@ -24,7 +24,7 @@ const (
 // Backing billy.FS doesn't support creation of
 // char, block, socket, or fifo pipe nodes
 func onMknod(ctx context.Context, w *response, userHandle Handler) error {
-	w.errorFmt = wccDataErrorFormatter
+	w.errorFmt = opAttrErrorFormatter // MKNOD resfail = post_op_attr only (RFC 1813)
 	obj := DirOpArg{}
 	err := xdr.Read(w.req.Body, &obj)
 	if err != nil {
