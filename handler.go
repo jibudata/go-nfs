@@ -45,6 +45,13 @@ type UnixChange interface {
 // CachingHandler represents the optional caching work that a user may wish to over-ride with
 // their own implementations, but which can be otherwise provided through defaults.
 type CachingHandler interface {
+
+	// RenameHandles migrates cached handles from the old to the new path
+	// after a successful RENAME (and invalidates the replaced target), so
+	// clients holding pre-rename handles keep resolving live inodes
+	// instead of stale ones (workspace issues #100/#129).
+	RenameHandles(fs billy.Filesystem, oldPath, newPath string)
+
 	VerifierFor(path string, contents []fs.FileInfo) uint64
 
 	// fs.FileInfo needs to be sorted by Name(), nil in case of a cache-miss

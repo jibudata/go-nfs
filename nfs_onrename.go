@@ -87,6 +87,15 @@ func onRename(ctx context.Context, w *response, userHandle Handler) error {
 		return &NFSStatusError{NFSStatusIO, err}
 	}
 
+	// Migrate cached handles to the new path (and invalidate the
+	// replaced target) BEFORE invalidating the old explicit handle:
+	// clients with open/cached handles keep resolving live inodes
+	// instead of stale ones (#100/#129).
+	if rh, ok := userHandle.(interface {
+		RenameHandles(fs billy.Filesystem, oldPath, newPath string)
+	}); ok {
+		rh.RenameHandles(fs, fromLoc, toLoc)
+	}
 	if err := userHandle.InvalidateHandle(fs, oldHandle); err != nil {
 		return &NFSStatusError{NFSStatusServerFault, err}
 	}
