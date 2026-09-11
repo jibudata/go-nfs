@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io/fs"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/jibudata/go-nfs"
@@ -203,4 +204,70 @@ func (c *CachingHandler) DataForVerifier(path string, id uint64) []fs.FileInfo {
 		return cache.contents
 	}
 	return nil
+}
+
+// RenameHandles migrates every cached handle under oldPath to newPath
+// after a successful RENAME, and invalidates handles at the replaced
+// target. Without this, clients holding pre-rename handles resolve them
+// to the OLD path: reads land on stale/missing inodes (content mismatch
+// observed as the soak's crc signature) and lookups of the new name miss
+// the cache (jibudata/agent-data-workspace#129, #100).
+//
+// Subtree moves (renaming a directory) migrate children too — the path
+// prefix is rewritten in place, keeping handle identity stable for every
+// file the client already has open or cached.
+func (c *CachingHandler) RenameHandles(f billy.Filesystem, oldPath, newPath string) {
+	c.reverseHandlesMu.Lock()
+	defer c.reverseHandlesMu.Unlock()
+
+	oldParts := splitPath(f.Join(oldPath))
+	newParts := splitPath(f.Join(newPath))
+
+	// 1) Invalidate handles at the target path (POSIX replace semantics):
+	// they now dangle.
+	if olds, ok := c.reverseHandles[strings.Join(newParts, "/")]; ok {
+		for _, id := range olds {
+			c.activeHandles.Remove(id)
+		}
+		delete(c.reverseHandles, strings.Join(newParts, "/"))
+	}
+
+	// 2) Migrate exact + subtree: rewrite entry paths in place.
+	oldKey := strings.Join(oldParts, "/")
+	prefix := oldKey + "/"
+	for p, ids := range c.reverseHandles {
+		var np string
+		switch {
+		case p == oldKey:
+			np = strings.Join(newParts, "/")
+		case len(p) > len(prefix) && p[:len(prefix)] == prefix:
+			np = strings.Join(newParts, "/") + p[len(oldKey):]
+		default:
+			continue
+		}
+		delete(c.reverseHandles, p)
+		c.reverseHandles[np] = ids
+		for _, id := range ids {
+			if e, ok := c.activeHandles.Get(id); ok {
+				rest := []string(nil)
+				if len(e.p) >= len(oldParts) {
+					rest = e.p[len(oldParts):]
+				}
+				np2 := append(append([]string{}, newParts...), rest...)
+				e.p = np2
+				c.activeHandles.Add(id, e)
+			}
+		}
+	}
+}
+
+// splitPath splits a joined path into components (mirrors entry.p form).
+func splitPath(p string) []string {
+	parts := []string{}
+	for _, seg := range strings.Split(p, "/") {
+		if seg != "" {
+			parts = append(parts, seg)
+		}
+	}
+	return parts
 }
