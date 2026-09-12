@@ -85,17 +85,21 @@ func (c *CachingHandler) FromHandle(fh []byte) (billy.Filesystem, []string, erro
 	}
 
 	if f, ok := c.activeHandles.Get(id); ok {
-		for _, k := range c.activeHandles.Keys() {
-			candidate, _ := c.activeHandles.Peek(k)
-			if hasPrefix(f.p, candidate.p) {
-				_, _ = c.activeHandles.Get(k)
+		// Refresh the ancestor chain so deep traversals don't LRU-evict
+		// the directories above them. O(depth) via the reverse cache —
+		// the previous full Keys() scan was O(cache size) per call and
+		// dominated server CPU on large trees (410k entries: 140x
+		// per-entry slowdown once the handle cache filled).
+		for i := len(f.p) - 1; i >= 0; i-- {
+			for _, id := range c.getReverseHandles(f.f.Join(f.p[:i]...)) {
+				if _, ok := c.activeHandles.Get(id); ok {
+					break
+				}
 			}
 		}
-		if ok {
-			newP := make([]string, len(f.p))
-			copy(newP, f.p)
-			return f.f, newP, nil
-		}
+		newP := make([]string, len(f.p))
+		copy(newP, f.p)
+		return f.f, newP, nil
 	}
 	return nil, []string{}, &nfs.NFSStatusError{NFSStatus: nfs.NFSStatusStale}
 }
