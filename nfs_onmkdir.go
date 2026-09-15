@@ -56,6 +56,9 @@ func onMkdir(ctx context.Context, w *response, userHandle Handler) error {
 	}
 
 	if err := fs.MkdirAll(newFolderPath, attrs.Mode(mkdirDefaultMode)); err != nil {
+		if st, ok := refineQuotaStatus(err); ok {
+			return &NFSStatusError{st, err}
+		}
 		return &NFSStatusError{NFSStatusAccess, err}
 	}
 

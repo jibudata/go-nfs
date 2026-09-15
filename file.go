@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-git/go-billy/v5"
-	"github.com/willscott/go-nfs-client/nfs/xdr"
 	"github.com/jibudata/go-nfs/file"
+	"github.com/willscott/go-nfs-client/nfs/xdr"
 )
 
 // FileAttribute holds metadata about a filesystem object
@@ -220,6 +220,9 @@ func (s *SetFileAttributes) Apply(changer billy.Change, fs billy.Filesystem, fil
 				if errors.Is(err, os.ErrPermission) {
 					return &NFSStatusError{NFSStatusAccess, os.ErrPermission}
 				}
+				if st, ok := refineQuotaStatus(err); ok {
+					return &NFSStatusError{st, err}
+				}
 				return err
 			}
 		}
@@ -241,6 +244,9 @@ func (s *SetFileAttributes) Apply(changer billy.Change, fs billy.Filesystem, fil
 				if errors.Is(err, os.ErrPermission) {
 					return &NFSStatusError{NFSStatusAccess, os.ErrPermission}
 				}
+				if st, ok := refineQuotaStatus(err); ok {
+					return &NFSStatusError{st, err}
+				}
 				return err
 			}
 		}
@@ -253,12 +259,18 @@ func (s *SetFileAttributes) Apply(changer billy.Change, fs billy.Filesystem, fil
 		if errors.Is(err, os.ErrPermission) {
 			return &NFSStatusError{NFSStatusAccess, err}
 		} else if err != nil {
+			if st, ok := refineQuotaStatus(err); ok {
+				return &NFSStatusError{st, err}
+			}
 			return err
 		}
 		if *s.SetSize > math.MaxInt64 {
 			return &NFSStatusError{NFSStatusInval, os.ErrInvalid}
 		}
 		if err := fp.Truncate(int64(*s.SetSize)); err != nil {
+			if st, ok := refineQuotaStatus(err); ok {
+				return &NFSStatusError{st, err}
+			}
 			return err
 		}
 		if err := fp.Close(); err != nil {

@@ -246,3 +246,27 @@ func statusFromWriteError(err error) NFSStatus {
 	}
 	return NFSStatusIO
 }
+
+// refineQuotaStatus refines a filesystem error into an NFS status when
+// it carries quota/space semantics: EDQUOT → NFS3ERR_DQUOT, ENOSPC →
+// NFS3ERR_NOSPC, EFBIG → NFS3ERR_FBIG. Mutation handlers (CREATE,
+// MKDIR, MKNOD, SYMLINK, RENAME, REMOVE, SETATTR) otherwise flatten
+// these into EACCES/IO, breaking the agent self-service contract — a
+// client must be able to tell "your quota, clean up" from "permission
+// denied" (issue #178, ADR-0020). ok=false leaves the caller's default
+// coercion untouched.
+func refineQuotaStatus(err error) (NFSStatus, bool) {
+	if err == nil {
+		return 0, false
+	}
+	if errors.Is(err, syscall.ENOSPC) {
+		return NFSStatusNoSPC, true
+	}
+	if errors.Is(err, syscall.EDQUOT) {
+		return NFSStatusDQuot, true
+	}
+	if errors.Is(err, syscall.EFBIG) {
+		return NFSStatusFBig, true
+	}
+	return 0, false
+}

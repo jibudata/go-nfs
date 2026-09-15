@@ -88,6 +88,9 @@ func onMknod(ctx context.Context, w *response, userHandle Handler) error {
 
 		err = cu.Mknod(newFilePath, uint32(attrs.Mode(parent.Mode())), specData1, specData2)
 		if err != nil {
+			if st, ok := refineQuotaStatus(err); ok {
+				return &NFSStatusError{st, err}
+			}
 			return &NFSStatusError{NFSStatusAccess, err}
 		}
 		if err = attrs.Apply(cu, fs, newFilePath); err != nil {
