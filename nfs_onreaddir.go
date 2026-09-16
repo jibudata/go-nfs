@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"time"
 
 	"github.com/willscott/go-nfs-client/nfs/xdr"
 )
@@ -153,12 +154,33 @@ func getDirListingWithVerifier(userHandle Handler, fsHandle []byte, verifier uin
 		}
 	}
 	// load the entries.
-	contents, err := fs.ReadDir(path)
-	if err != nil {
-		if os.IsPermission(err) {
-			return nil, 0, &NFSStatusError{NFSStatusAccess, err}
+	// Tolerant sweep: os.ReadDir stats every entry and fails the whole
+	// batch if one entry vanished between getdents and lstat (observed
+	// under create/delete churn). RFC 1813 permits entries to disappear
+	// during READDIR(+): retry a few times — each pass takes a fresh
+	// getdents snapshot — and only a truly missing DIRECTORY is an
+	// error (NOENT), never a blanket NOTDIR for a live directory.
+	var contents []os.FileInfo
+	var rerr error
+	for attempt := 0; ; attempt++ {
+		contents, rerr = fs.ReadDir(path)
+		if rerr == nil {
+			break
 		}
-		return nil, 0, &NFSStatusError{NFSStatusNotDir, err}
+		if attempt < 2 && os.IsNotExist(rerr) {
+			time.Sleep(time.Duration(attempt+1) * 5 * time.Millisecond)
+			continue
+		}
+		break
+	}
+	if rerr != nil {
+		if os.IsPermission(rerr) {
+			return nil, 0, &NFSStatusError{NFSStatusAccess, rerr}
+		}
+		if os.IsNotExist(rerr) {
+			return nil, 0, &NFSStatusError{NFSStatusNoEnt, rerr}
+		}
+		return nil, 0, &NFSStatusError{NFSStatusNotDir, rerr}
 	}
 
 	sort.Slice(contents, func(i, j int) bool {
