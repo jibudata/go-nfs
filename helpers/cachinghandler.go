@@ -28,11 +28,13 @@ func NewCachingHandlerWithVerifierLimit(h nfs.Handler, limit int, verifierLimit 
 	cache, _ := lru.New[uuid.UUID, entry](limit)
 	verifiers, _ := lru.New[uint64, verifier](verifierLimit)
 	return &CachingHandler{
-		Handler:         h,
-		activeHandles:   cache,
-		reverseHandles:  make(map[string][]uuid.UUID),
-		activeVerifiers: verifiers,
-		cacheLimit:      limit,
+		Handler:              h,
+		activeHandles:        cache,
+		reverseHandles:       make(map[string][]uuid.UUID),
+		activeVerifiers:      verifiers,
+		lastCompleteByPath:   make(map[string]uint64),
+		lastCompleteByPathMu: sync.RWMutex{},
+		cacheLimit:           limit,
 	}
 }
 
@@ -43,7 +45,13 @@ type CachingHandler struct {
 	reverseHandles   map[string][]uuid.UUID
 	reverseHandlesMu sync.RWMutex
 	activeVerifiers  *lru.Cache[uint64, verifier]
-	cacheLimit       int
+	// lastCompleteByPath: path → most recent COMPLETE listing (verifier
+	// id). Serves as the fallback when a fresh ReadDir transiently fails
+	// (entry vanished mid-sweep under churn): a stale-but-complete
+	// listing is RFC 1813-legal weak consistency; a hard failure is not.
+	lastCompleteByPath   map[string]uint64
+	lastCompleteByPathMu sync.RWMutex
+	cacheLimit           int
 }
 
 type entry struct {
@@ -200,7 +208,25 @@ func hashPathAndContents(path string, contents []fs.FileInfo) uint64 {
 func (c *CachingHandler) VerifierFor(path string, contents []fs.FileInfo) uint64 {
 	id := hashPathAndContents(path, contents)
 	c.activeVerifiers.Add(id, verifier{path, contents})
+	c.lastCompleteByPathMu.Lock()
+	c.lastCompleteByPath[path] = id
+	c.lastCompleteByPathMu.Unlock()
 	return id
+}
+
+// LastCompleteListing returns the most recent complete listing recorded
+// for path (fallback when a fresh ReadDir transiently fails), if any.
+func (c *CachingHandler) LastCompleteListing(path string) ([]fs.FileInfo, uint64, bool) {
+	c.lastCompleteByPathMu.RLock()
+	id, ok := c.lastCompleteByPath[path]
+	c.lastCompleteByPathMu.RUnlock()
+	if !ok {
+		return nil, 0, false
+	}
+	if cache, ok := c.activeVerifiers.Get(id); ok {
+		return cache.contents, id, true
+	}
+	return nil, 0, false
 }
 
 func (c *CachingHandler) DataForVerifier(path string, id uint64) []fs.FileInfo {

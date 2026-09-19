@@ -174,6 +174,17 @@ func getDirListingWithVerifier(userHandle Handler, fsHandle []byte, verifier uin
 		break
 	}
 	if rerr != nil {
+		// Transient entry-vanish races (create/delete churn) exhaust the
+		// retries: serve the last COMPLETE listing for this path instead
+		// of failing the walk. Weak consistency (RFC 1813) beats a hard
+		// failure mid-pagination; the next generation re-scans fresh.
+		if vh, ok := userHandle.(interface {
+			LastCompleteListing(path string) ([]os.FileInfo, uint64, bool)
+		}); ok {
+			if contents, verifier, found := vh.LastCompleteListing(path); found {
+				return contents, verifier, nil
+			}
+		}
 		if os.IsPermission(rerr) {
 			return nil, 0, &NFSStatusError{NFSStatusAccess, rerr}
 		}
