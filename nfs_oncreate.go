@@ -80,14 +80,14 @@ func onCreate(ctx context.Context, w *response, userHandle Handler) error {
 	file, err := fs.Create(newFilePath)
 	if err != nil {
 		Log.Errorf("Error Creating: %v", err)
-		if st, ok := refineQuotaStatus(err); ok {
+		if st, ok := refineFsErrnoStatus(err); ok {
 			return &NFSStatusError{st, err}
 		}
 		return &NFSStatusError{NFSStatusAccess, err}
 	}
 	if err := file.Close(); err != nil {
 		Log.Errorf("Error Creating: %v", err)
-		if st, ok := refineQuotaStatus(err); ok {
+		if st, ok := refineFsErrnoStatus(err); ok {
 			return &NFSStatusError{st, err}
 		}
 		return &NFSStatusError{NFSStatusAccess, err}

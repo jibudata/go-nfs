@@ -247,15 +247,20 @@ func statusFromWriteError(err error) NFSStatus {
 	return NFSStatusIO
 }
 
-// refineQuotaStatus refines a filesystem error into an NFS status when
-// it carries quota/space semantics: EDQUOT → NFS3ERR_DQUOT, ENOSPC →
-// NFS3ERR_NOSPC, EFBIG → NFS3ERR_FBIG. Mutation handlers (CREATE,
-// MKDIR, MKNOD, SYMLINK, RENAME, REMOVE, SETATTR) otherwise flatten
-// these into EACCES/IO, breaking the agent self-service contract — a
-// client must be able to tell "your quota, clean up" from "permission
-// denied" (issue #178, ADR-0020). ok=false leaves the caller's default
-// coercion untouched.
-func refineQuotaStatus(err error) (NFSStatus, bool) {
+// refineFsErrnoStatus refines a filesystem error into its NFS status
+// when it carries semantics a client must see unflattened. Mutation
+// handlers (CREATE, MKDIR, MKNOD, SYMLINK, RENAME, REMOVE, SETATTR)
+// otherwise coerce these into EACCES/IO, breaking the agent
+// self-service contract. ok=false leaves the caller's default coercion
+// untouched. Covered semantics:
+//   - quota/space: ENOSPC → NFS3ERR_NOSPC, EDQUOT → NFS3ERR_DQUOT,
+//     EFBIG → NFS3ERR_FBIG (issue #178, ADR-0020) — "your quota, clean
+//     up" is not "permission denied";
+//   - name length: ENAMETOOLONG → NFS3ERR_NAMETOOLONG — backends with
+//     an explicit path-budget guard (agent-data-workspace issue #351)
+//     refuse oversized paths before the kernel does, and the condition
+//     must survive the wire.
+func refineFsErrnoStatus(err error) (NFSStatus, bool) {
 	if err == nil {
 		return 0, false
 	}
@@ -267,6 +272,9 @@ func refineQuotaStatus(err error) (NFSStatus, bool) {
 	}
 	if errors.Is(err, syscall.EFBIG) {
 		return NFSStatusFBig, true
+	}
+	if errors.Is(err, syscall.ENAMETOOLONG) {
+		return NFSStatusNameTooLong, true
 	}
 	return 0, false
 }

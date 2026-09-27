@@ -89,7 +89,7 @@ func onRemoveObj(ctx context.Context, w *response, userHandle Handler, directory
 		if os.IsPermission(err) {
 			return &NFSStatusError{NFSStatusAccess, err}
 		}
-		if st, ok := refineQuotaStatus(err); ok {
+		if st, ok := refineFsErrnoStatus(err); ok {
 			return &NFSStatusError{st, err}
 		}
 		return &NFSStatusError{NFSStatusIO, err}

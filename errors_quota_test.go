@@ -28,9 +28,9 @@ func TestRefineQuotaStatus(t *testing.T) {
 		{"nil", nil, 0, false},
 	}
 	for _, tc := range cases {
-		got, ok := refineQuotaStatus(tc.err)
+		got, ok := refineFsErrnoStatus(tc.err)
 		if ok != tc.ok || (ok && got != tc.want) {
-			t.Errorf("%s: refineQuotaStatus(%v) = %d,%v; want %d,%v", tc.name, tc.err, got, ok, tc.want, tc.ok)
+			t.Errorf("%s: refineFsErrnoStatus(%v) = %d,%v; want %d,%v", tc.name, tc.err, got, ok, tc.want, tc.ok)
 		}
 	}
 }
