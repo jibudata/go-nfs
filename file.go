@@ -220,7 +220,7 @@ func (s *SetFileAttributes) Apply(changer billy.Change, fs billy.Filesystem, fil
 				if errors.Is(err, os.ErrPermission) {
 					return &NFSStatusError{NFSStatusAccess, os.ErrPermission}
 				}
-				if st, ok := refineQuotaStatus(err); ok {
+				if st, ok := refineFsErrnoStatus(err); ok {
 					return &NFSStatusError{st, err}
 				}
 				return err
@@ -244,7 +244,7 @@ func (s *SetFileAttributes) Apply(changer billy.Change, fs billy.Filesystem, fil
 				if errors.Is(err, os.ErrPermission) {
 					return &NFSStatusError{NFSStatusAccess, os.ErrPermission}
 				}
-				if st, ok := refineQuotaStatus(err); ok {
+				if st, ok := refineFsErrnoStatus(err); ok {
 					return &NFSStatusError{st, err}
 				}
 				return err
@@ -259,7 +259,7 @@ func (s *SetFileAttributes) Apply(changer billy.Change, fs billy.Filesystem, fil
 		if errors.Is(err, os.ErrPermission) {
 			return &NFSStatusError{NFSStatusAccess, err}
 		} else if err != nil {
-			if st, ok := refineQuotaStatus(err); ok {
+			if st, ok := refineFsErrnoStatus(err); ok {
 				return &NFSStatusError{st, err}
 			}
 			return err
@@ -268,7 +268,7 @@ func (s *SetFileAttributes) Apply(changer billy.Change, fs billy.Filesystem, fil
 			return &NFSStatusError{NFSStatusInval, os.ErrInvalid}
 		}
 		if err := fp.Truncate(int64(*s.SetSize)); err != nil {
-			if st, ok := refineQuotaStatus(err); ok {
+			if st, ok := refineFsErrnoStatus(err); ok {
 				return &NFSStatusError{st, err}
 			}
 			return err
