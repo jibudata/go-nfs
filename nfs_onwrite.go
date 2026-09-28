@@ -70,7 +70,7 @@ func onWrite(ctx context.Context, w *response, userHandle Handler) error {
 	}
 	if req.Offset > 0 {
 		if _, err := file.Seek(int64(req.Offset), io.SeekStart); err != nil {
-			return &NFSStatusError{NFSStatusIO, err}
+			return &NFSStatusError{statusFromOSError(err), err}
 		}
 	}
 	end := req.Count

@@ -25,7 +25,7 @@ func onGetAttr(ctx context.Context, w *response, userHandle Handler) error {
 		if os.IsNotExist(err) {
 			return &NFSStatusError{NFSStatusNoEnt, err}
 		}
-		return &NFSStatusError{NFSStatusIO, err}
+		return &NFSStatusError{statusFromOSError(err), err}
 	}
 	attr := ToFileAttribute(info, fullPath)
 

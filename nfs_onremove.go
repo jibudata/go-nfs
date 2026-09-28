@@ -41,7 +41,7 @@ func onRemoveObj(ctx context.Context, w *response, userHandle Handler, directory
 		if os.IsPermission(err) {
 			return &NFSStatusError{NFSStatusAccess, err}
 		}
-		return &NFSStatusError{NFSStatusIO, err}
+		return &NFSStatusError{statusFromOSError(err), err}
 	}
 	if !dirInfo.IsDir() {
 		return &NFSStatusError{NFSStatusNotDir, nil}
@@ -60,7 +60,7 @@ func onRemoveObj(ctx context.Context, w *response, userHandle Handler, directory
 		if os.IsPermission(err) {
 			return &NFSStatusError{NFSStatusAccess, err}
 		}
-		return &NFSStatusError{NFSStatusIO, err}
+		return &NFSStatusError{statusFromOSError(err), err}
 
 	}
 
@@ -76,7 +76,7 @@ func onRemoveObj(ctx context.Context, w *response, userHandle Handler, directory
 			if os.IsPermission(err) {
 				return &NFSStatusError{NFSStatusAccess, err}
 			}
-			return &NFSStatusError{NFSStatusIO, err}
+			return &NFSStatusError{statusFromOSError(err), err}
 		}
 		if len(contents) > 0 {
 			return &NFSStatusError{NFSStatusNotEmpty, nil}
@@ -92,7 +92,7 @@ func onRemoveObj(ctx context.Context, w *response, userHandle Handler, directory
 		if os.IsPermission(err) {
 			return &NFSStatusError{NFSStatusAccess, err}
 		}
-		return &NFSStatusError{NFSStatusIO, err}
+		return &NFSStatusError{statusFromOSError(err), err}
 	}
 
 	if err := userHandle.InvalidateHandle(fs, toDeleteHandle); err != nil {

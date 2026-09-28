@@ -68,7 +68,7 @@ func onRead(ctx context.Context, w *response, userHandle Handler) error {
 	// todo: multiple reads if size isn't full
 	cnt, err := fh.ReadAt(resp.Data, int64(obj.Offset))
 	if err != nil && !errors.Is(err, io.EOF) {
-		return &NFSStatusError{NFSStatusIO, err}
+		return &NFSStatusError{statusFromOSError(err), err}
 	}
 	resp.Count = uint32(cnt)
 	resp.Data = resp.Data[:resp.Count]

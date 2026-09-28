@@ -68,7 +68,7 @@ func onLink(ctx context.Context, w *response, userHandle Handler) error {
 		return &NFSStatusError{NFSStatusAccess, err}
 	}
 	if err := attrs.Apply(changer, fs, newFilePath); err != nil {
-		return &NFSStatusError{NFSStatusIO, err}
+		return &NFSStatusError{statusFromOSError(err), err}
 	}
 
 	writer := bytes.NewBuffer([]byte{})

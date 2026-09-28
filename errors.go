@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 	"syscall"
 )
 
@@ -229,6 +230,44 @@ var (
 	wccDataErrorBody      = [8]byte{}
 	wccDataErrorFormatter = errFormatterWithBody(wccDataErrorBody[:])
 )
+
+// statusFromOSError maps a backing-filesystem error to the most
+// specific NFSv3 status instead of the NFSStatusIO catch-all
+// (jibudata/agent-data-workspace#351): ENAMETOOLONG previously fell
+// through to NFSStatusIO, so deep-path pjdfstest probes observed an
+// EIO cascade (chmod/stat/unlink/rename) instead of
+// NFS3ERR_NAMETOOLONG, and clients could not distinguish name-length
+// rejections from genuine I/O failure.
+func statusFromOSError(err error) NFSStatus {
+	if err == nil {
+		return NFSStatusOk
+	}
+	// Specific errnos first: the os.* sentinels match broadly
+	// (os.ErrExist also covers ENOTEMPTY) and would shadow them.
+	switch {
+	case errors.Is(err, syscall.ENAMETOOLONG):
+		return NFSStatusNameTooLong
+	case errors.Is(err, syscall.ENOTEMPTY):
+		return NFSStatusNotEmpty
+	case errors.Is(err, syscall.ENOTDIR):
+		return NFSStatusNotDir
+	case errors.Is(err, syscall.EISDIR):
+		return NFSStatusIsDir
+	case errors.Is(err, syscall.ENOSPC):
+		return NFSStatusNoSPC
+	case errors.Is(err, syscall.EDQUOT):
+		return NFSStatusDQuot
+	case errors.Is(err, syscall.EFBIG):
+		return NFSStatusFBig
+	case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ENOENT):
+		return NFSStatusNoEnt
+	case errors.Is(err, os.ErrExist), errors.Is(err, syscall.EEXIST):
+		return NFSStatusExist
+	case errors.Is(err, os.ErrPermission), errors.Is(err, syscall.EACCES):
+		return NFSStatusAccess
+	}
+	return NFSStatusIO
+}
 
 // statusFromWriteError maps write errors to NFS status codes
 func statusFromWriteError(err error) NFSStatus {

@@ -71,7 +71,7 @@ func onMkdir(ctx context.Context, w *response, userHandle Handler) error {
 	changer := userHandle.Change(fs)
 	if changer != nil {
 		if err := attrs.Apply(changer, fs, newFolderPath); err != nil {
-			return &NFSStatusError{NFSStatusIO, err}
+			return &NFSStatusError{statusFromOSError(err), err}
 		}
 	}
 
