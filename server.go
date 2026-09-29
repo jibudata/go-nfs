@@ -14,6 +14,11 @@ type Server struct {
 	Handler
 	ID [8]byte
 	context.Context
+	// writeCache is the optional handle-keyed write fd cache
+	// (issue #235). nil = disabled: every WRITE opens by path and
+	// closes after the write (legacy semantics). Set only through
+	// WithWriteHandleCache.
+	writeCache *writeHandleCache
 }
 
 // RegisterMessageHandler registers a handler for a specific
