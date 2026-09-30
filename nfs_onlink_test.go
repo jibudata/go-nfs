@@ -42,6 +42,8 @@ func (h *onLinkStubHandler) Change(fs billy.Filesystem) billy.Change {
 	return onLinkOsChanger{root: fs.Root()}
 }
 
+func (h *onLinkStubHandler) HandleLimit() int { return 4096 }
+
 // onLinkOsChanger implements UnixChange against the real OS, rooted at
 // the billy filesystem root, mirroring what shadowFS-style backends do.
 type onLinkOsChanger struct {
