@@ -57,6 +57,10 @@ func onRead(ctx context.Context, w *response, userHandle Handler) error {
 	if int64(obj.Offset) >= info.Size() {
 		obj.Count = 0
 		setEOF = true
+		// [DEBUG-486-fork] EOF-trim fired: the stat-backed size was at
+		// or below the read offset at serve time.
+		Log.Printf("[DEBUG-486-fork] onRead EOF-trim: path=%v offset=%d statSize=%d count=%d",
+			path, obj.Offset, info.Size(), obj.Count)
 	} else if info.Size()-int64(obj.Offset) <= int64(obj.Count) {
 		obj.Count = uint32(uint64(info.Size()) - obj.Offset)
 		setEOF = true
