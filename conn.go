@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	xdr2 "github.com/rasky/go-xdr/xdr2"
 	"github.com/willscott/go-nfs-client/nfs/rpc"
@@ -41,11 +42,21 @@ type conn struct {
 	*Server
 	writeSerializer chan []byte
 	net.Conn
+	// cancel releases the serve loop's finish() when the serializer
+	// tears the connection down after a write failure (see abort).
+	cancel context.CancelFunc
+	// writeTimeout bounds each serialized response flush. A stuck
+	// client must not hold the pipeline forever: without a deadline a
+	// wedged client deadlocks the connection silently — the read loop
+	// blocks on the full writeSerializer channel, further requests go
+	// unanswered, and a hard mount hangs until rebooted. 0 = default.
+	writeTimeout time.Duration
 }
 
 func (c *conn) serve(ctx context.Context) {
 	connCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	c.cancel = cancel
 	c.writeSerializer = make(chan []byte, 1)
 	go c.serializeWrites(connCtx)
 
@@ -90,25 +101,57 @@ func (c *conn) serializeWrites(ctx context.Context) {
 			if !ok {
 				return
 			}
+			// A stuck client must not hold the pipeline forever: bound
+			// the flush so a wedged peer surfaces as a write error (and
+			// a connection reset) instead of a silent deadlock.
+			timeout := c.writeTimeout
+			if timeout == 0 {
+				timeout = 2 * time.Minute
+			}
+			if err := c.Conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+				Log.Errorf("serializeWrites: set write deadline: %v", err)
+			}
 			// prepend the fragmentation header
 			fragmentInt = uint32(len(msg))
 			fragmentInt |= (1 << 31)
 			binary.BigEndian.PutUint32(fragmentBuf[:], fragmentInt)
 			n, err := writer.Write(fragmentBuf[:])
 			if n < 4 || err != nil {
+				Log.Errorf("serializeWrites: fragment header write failed (%d/%d): %v — closing connection", n, 4, err)
+				c.abort()
 				return
 			}
 			n, err = writer.Write(msg)
 			if err != nil {
+				Log.Errorf("serializeWrites: response write failed: %v — closing connection", err)
+				c.abort()
 				return
 			}
 			if n < len(msg) {
-				panic("todo: ensure writes complete fully.")
+				Log.Errorf("serializeWrites: short write (%d/%d) — closing connection", n, len(msg))
+				c.abort()
+				return
 			}
 			if err = writer.Flush(); err != nil {
+				Log.Errorf("serializeWrites: flush failed: %v — closing connection", err)
+				c.abort()
 				return
 			}
 		}
+	}
+}
+
+// abort tears the connection down after a serializer write failure.
+// Without it a stuck client deadlocks the pipeline silently: the serve
+// loop blocks on the full writeSerializer channel, further requests go
+// unanswered, and a hard mount hangs until rebooted (found by the
+// agent-data-workspace compliance gate, #512). Closing the socket makes
+// the client reconnect (a hard mount retries on a fresh connection) and
+// cancelling the context releases any finish() blocked on the channel.
+func (c *conn) abort() {
+	c.Close()
+	if c.cancel != nil {
+		c.cancel()
 	}
 }
 

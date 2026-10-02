@@ -80,9 +80,22 @@ func onReadDir(ctx context.Context, w *response, userHandle Handler) error {
 
 	eof := true
 	maxEntities := userHandle.HandleLimit() / 2
+	// Resumption emits the entries FOLLOWING the cookie position (RFC
+	// 1813). Contents cookies start at 2 (0 and 1 are '.' and '..'), so
+	// resuming from cookie 1 must start at contents[0] — the previous
+	// equality-based resume test never fired for it and returned an
+	// empty, EOF-true directory (cthon04 special/telldir).
+	resume := !started
 	for i, c := range contents {
 		// cookie equates to index within contents + 2 (for '.' and '..')
 		cookie := uint64(i + 2)
+		if resume {
+			if cookie <= obj.Cookie {
+				continue
+			}
+			resume = false
+			started = true
+		}
 		if started {
 			maxBytes += 512 // TODO: better estimation.
 			if maxBytes > obj.Count || len(entities) > maxEntities {
@@ -97,8 +110,6 @@ func onReadDir(ctx context.Context, w *response, userHandle Handler) error {
 				Cookie: cookie,
 				Next:   true,
 			})
-		} else if cookie == obj.Cookie {
-			started = true
 		}
 	}
 
