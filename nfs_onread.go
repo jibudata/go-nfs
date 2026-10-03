@@ -47,24 +47,18 @@ func onRead(ctx context.Context, w *response, userHandle Handler) error {
 	defer fh.Close()
 
 	resp := nfsReadResponse{}
-	setEOF := false
 
 	fullPath := fs.Join(path...)
 	info, err := fs.Stat(fullPath)
 	if err != nil {
 		return &NFSStatusError{NFSStatusAccess, err}
 	}
-	if int64(obj.Offset) >= info.Size() {
-		obj.Count = 0
-		setEOF = true
-		// [DEBUG-486-fork] EOF-trim fired: the stat-backed size was at
-		// or below the read offset at serve time.
-		Log.Printf("[DEBUG-486-fork] onRead EOF-trim: path=%v offset=%d statSize=%d count=%d",
-			path, obj.Offset, info.Size(), obj.Count)
-	} else if info.Size()-int64(obj.Offset) <= int64(obj.Count) {
-		obj.Count = uint32(uint64(info.Size()) - obj.Offset)
-		setEOF = true
-	}
+	// The stat-based Count trim (Offset >= statSize -> count=0 + EOF)
+	// is REMOVED (agent-data-workspace #486/#511): the backing
+	// filesystem's stat can lag its physical bytes (batched stat
+	// publication), and trimming to the stale size delivered truncation
+	// to well-formed clients. ReadAt's real EOF is the only truth;
+	// MaxRead stays the protocol cap.
 	if obj.Count > MaxRead {
 		obj.Count = MaxRead
 	}
@@ -76,7 +70,7 @@ func onRead(ctx context.Context, w *response, userHandle Handler) error {
 	}
 	resp.Count = uint32(cnt)
 	resp.Data = resp.Data[:resp.Count]
-	if errors.Is(err, io.EOF) || setEOF {
+	if errors.Is(err, io.EOF) {
 		resp.EOF = 1
 	}
 
